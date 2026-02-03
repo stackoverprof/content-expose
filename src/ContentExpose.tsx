@@ -27,7 +27,7 @@ const styles: Record<string, CSSProperties> = {
     position: "fixed",
     backgroundColor: "#1e1e1e",
     borderRadius: "8px",
-    boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)",
+    boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.1)",
     border: "1px solid #333",
     display: "flex",
     flexDirection: "column",
@@ -499,6 +499,14 @@ export function ContentExpose() {
               onClick={handleCopy}
               style={styles.exportButton}
               onMouseDown={(e) => e.stopPropagation()}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = "#444";
+                e.currentTarget.style.color = "#ccc";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = "transparent";
+                e.currentTarget.style.color = "#888";
+              }}
             >
               <svg
                 style={{ width: "12px", height: "12px" }}
@@ -519,6 +527,14 @@ export function ContentExpose() {
               onClick={() => setIsOpen(false)}
               style={styles.closeButton}
               onMouseDown={(e) => e.stopPropagation()}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = "#444";
+                e.currentTarget.style.color = "#ccc";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = "transparent";
+                e.currentTarget.style.color = "#666";
+              }}
             >
               ✕
             </button>
@@ -534,6 +550,16 @@ export function ContentExpose() {
               style={{
                 ...styles.tab,
                 ...(activeTab === key ? styles.tabActive : styles.tabInactive),
+              }}
+              onMouseEnter={(e) => {
+                if (activeTab !== key) {
+                  e.currentTarget.style.backgroundColor = "#2d2d2d";
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (activeTab !== key) {
+                  e.currentTarget.style.backgroundColor = "transparent";
+                }
               }}
             >
               {key}
@@ -576,11 +602,29 @@ export function ContentExpose() {
 
         {/* Actions */}
         <div style={styles.actionsContainer}>
-          <button onClick={handlePreview} style={styles.previewButton}>
+          <button
+            onClick={handlePreview}
+            style={styles.previewButton}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = "#1177bb";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = "#0e639c";
+            }}
+          >
             Preview
           </button>
           {hasPreview && (
-            <button onClick={handleReset} style={styles.resetButton}>
+            <button
+              onClick={handleReset}
+              style={styles.resetButton}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = "#444";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = "#333";
+              }}
+            >
               Reset
             </button>
           )}
