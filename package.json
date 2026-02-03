@@ -1,6 +1,6 @@
 {
   "name": "content-expose",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "A lightweight content editing devtools panel for React applications",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
@@ -31,17 +31,17 @@
   "license": "MIT",
   "peerDependencies": {
     "react": ">=17.0.0",
-    "react-dom": ">=17.0.0"
-  },
-  "dependencies": {
-    "react-rnd": "^10.4.13",
-    "react-simple-code-editor": "^0.14.1"
+    "react-dom": ">=17.0.0",
+    "react-rnd": "^10.0.0",
+    "react-simple-code-editor": "^0.14.0"
   },
   "devDependencies": {
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "react-rnd": "^10.4.13",
+    "react-simple-code-editor": "^0.14.1",
     "tsup": "^8.3.5",
     "typescript": "^5.7.2"
   }

@@ -1,6 +1,4 @@
 import { useEffect, useRef, useState, CSSProperties } from "react";
-import { Rnd } from "react-rnd";
-import Editor from "react-simple-code-editor";
 import {
   getRawContent,
   getAccessedKeys,
@@ -161,7 +159,18 @@ const styles: Record<string, CSSProperties> = {
   },
 };
 
-export function ContentExpose() {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type RndComponent = any;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type EditorComponent = any;
+
+function ContentExposeInner({
+  Rnd,
+  Editor,
+}: {
+  Rnd: RndComponent;
+  Editor: EditorComponent;
+}) {
   const [isOpen, setIsOpen] = useState(() => {
     if (typeof window !== "undefined") {
       return localStorage.getItem("content-expose-open") === "true";
@@ -304,10 +313,16 @@ export function ContentExpose() {
     <Rnd
       position={{ x: bounds.x, y: bounds.y }}
       size={{ width: bounds.width, height: bounds.height }}
-      onDragStop={(_, d) =>
+      onDragStop={(_: unknown, d: { x: number; y: number }) =>
         setBounds((b: typeof DEFAULT_BOUNDS) => ({ ...b, x: d.x, y: d.y }))
       }
-      onResizeStop={(_, __, ref, ___, pos) =>
+      onResizeStop={(
+        _: unknown,
+        __: unknown,
+        ref: HTMLElement,
+        ___: unknown,
+        pos: { x: number; y: number }
+      ) =>
         setBounds({
           x: pos.x,
           y: pos.y,
@@ -402,7 +417,7 @@ export function ContentExpose() {
         <div ref={scrollRef} style={styles.editorContainer}>
           <Editor
             value={tabs[activeTab] || ""}
-            onValueChange={(value) => handleTabChange(activeTab, value)}
+            onValueChange={(value: string) => handleTabChange(activeTab, value)}
             highlight={highlightJson}
             padding={8}
             style={{
@@ -458,4 +473,29 @@ export function ContentExpose() {
       </div>
     </Rnd>
   );
+}
+
+// Client-only wrapper that dynamically imports dependencies
+export function ContentExpose() {
+  const [components, setComponents] = useState<{
+    Rnd: RndComponent;
+    Editor: EditorComponent;
+  } | null>(null);
+
+  useEffect(() => {
+    // Only load on client
+    Promise.all([
+      import("react-rnd"),
+      import("react-simple-code-editor"),
+    ]).then(([rndModule, editorModule]) => {
+      setComponents({
+        Rnd: rndModule.Rnd,
+        Editor: editorModule.default,
+      });
+    });
+  }, []);
+
+  if (!components) return null;
+
+  return <ContentExposeInner Rnd={components.Rnd} Editor={components.Editor} />;
 }
