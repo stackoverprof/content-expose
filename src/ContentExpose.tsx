@@ -488,9 +488,19 @@ export function ContentExpose() {
       import("react-rnd"),
       import("react-simple-code-editor"),
     ]).then(([rndModule, editorModule]) => {
+      // Handle various module export formats
+      const RndComp = rndModule.Rnd || (rndModule as { default: { Rnd: RndComponent } }).default?.Rnd || (rndModule as { default: RndComponent }).default;
+      const EditorComp = editorModule.default || editorModule;
+
+      // Debug logging
+      console.log('[content-expose] rndModule:', rndModule);
+      console.log('[content-expose] editorModule:', editorModule);
+      console.log('[content-expose] RndComp type:', typeof RndComp);
+      console.log('[content-expose] EditorComp type:', typeof EditorComp);
+
       setComponents({
-        Rnd: rndModule.Rnd,
-        Editor: editorModule.default,
+        Rnd: RndComp,
+        Editor: EditorComp,
       });
     });
   }, []);
