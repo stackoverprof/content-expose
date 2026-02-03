@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, CSSProperties } from "react";
+import { useEffect, useRef, useState, CSSProperties, useCallback } from "react";
 import {
   getRawContent,
   getAccessedKeys,
@@ -21,18 +21,18 @@ function getStoredBounds() {
   return DEFAULT_BOUNDS;
 }
 
-// Inline styles converted from Tailwind
+// Inline styles
 const styles: Record<string, CSSProperties> = {
   container: {
-    width: "100%",
-    height: "100%",
+    position: "fixed",
     backgroundColor: "#1e1e1e",
     borderRadius: "8px",
-    boxShadow:
-      "0 25px 50px -12px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(51, 51, 51, 1)",
+    boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)",
     border: "1px solid #333",
     display: "flex",
     flexDirection: "column",
+    zIndex: 9999,
+    overflow: "hidden",
   },
   titleBar: {
     display: "flex",
@@ -41,9 +41,8 @@ const styles: Record<string, CSSProperties> = {
     padding: "4px 8px",
     borderBottom: "1px solid #333",
     backgroundColor: "#323233",
-    borderTopLeftRadius: "8px",
-    borderTopRightRadius: "8px",
     cursor: "move",
+    userSelect: "none",
   },
   titleText: {
     fontSize: "10px",
@@ -109,6 +108,22 @@ const styles: Record<string, CSSProperties> = {
   editorContainer: {
     flex: 1,
     overflow: "auto",
+    position: "relative",
+  },
+  textarea: {
+    width: "100%",
+    height: "100%",
+    minHeight: "200px",
+    padding: "8px",
+    margin: 0,
+    border: "none",
+    outline: "none",
+    resize: "none",
+    fontFamily: "ui-monospace, monospace",
+    fontSize: "11px",
+    backgroundColor: "#1e1e1e",
+    color: "#d4d4d4",
+    lineHeight: 1.5,
   },
   successMessage: {
     padding: "4px 8px",
@@ -132,8 +147,6 @@ const styles: Record<string, CSSProperties> = {
     padding: "4px",
     borderTop: "1px solid #333",
     backgroundColor: "#252526",
-    borderBottomLeftRadius: "8px",
-    borderBottomRightRadius: "8px",
   },
   previewButton: {
     flex: 1,
@@ -157,20 +170,18 @@ const styles: Record<string, CSSProperties> = {
     border: "none",
     cursor: "pointer",
   },
+  resizeHandle: {
+    position: "absolute",
+    bottom: 0,
+    right: 0,
+    width: "16px",
+    height: "16px",
+    cursor: "se-resize",
+    background: "linear-gradient(135deg, transparent 50%, #666 50%)",
+  },
 };
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type RndComponent = any;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type EditorComponent = any;
-
-function ContentExposeInner({
-  Rnd,
-  Editor,
-}: {
-  Rnd: RndComponent;
-  Editor: EditorComponent;
-}) {
+export function ContentExpose() {
   const [isOpen, setIsOpen] = useState(() => {
     if (typeof window !== "undefined") {
       return localStorage.getItem("content-expose-open") === "true";
@@ -188,7 +199,10 @@ function ContentExposeInner({
   const [hasPreview, setHasPreview] = useState(false);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [isResizing, setIsResizing] = useState(false);
+  const dragStartRef = useRef({ x: 0, y: 0, boundsX: 0, boundsY: 0 });
+  const resizeStartRef = useRef({ x: 0, y: 0, width: 0, height: 0 });
 
   useEffect(() => {
     localStorage.setItem("content-expose-open", isOpen ? "true" : "false");
@@ -233,28 +247,97 @@ function ContentExposeInner({
         setActiveTab(accessed[0] || "");
       }
       setHasPreview(!!localStorage.getItem("content-expose-preview"));
-
-      // Restore scroll position after render
-      requestAnimationFrame(() => {
-        const savedScroll = localStorage.getItem("content-expose-scroll");
-        if (savedScroll && scrollRef.current) {
-          scrollRef.current.scrollTop = parseInt(savedScroll);
-        }
-      });
     }
   }, [isOpen, activeTab]);
+
+  // Drag handling
+  const handleDragStart = useCallback((e: React.MouseEvent) => {
+    setIsDragging(true);
+    dragStartRef.current = {
+      x: e.clientX,
+      y: e.clientY,
+      boundsX: bounds.x,
+      boundsY: bounds.y,
+    };
+  }, [bounds.x, bounds.y]);
+
+  useEffect(() => {
+    if (!isDragging) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const dx = e.clientX - dragStartRef.current.x;
+      const dy = e.clientY - dragStartRef.current.y;
+      setBounds((b: typeof DEFAULT_BOUNDS) => ({
+        ...b,
+        x: Math.max(0, dragStartRef.current.boundsX + dx),
+        y: Math.max(0, dragStartRef.current.boundsY + dy),
+      }));
+    };
+
+    const handleMouseUp = () => {
+      setIsDragging(false);
+    };
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [isDragging]);
+
+  // Resize handling
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsResizing(true);
+    resizeStartRef.current = {
+      x: e.clientX,
+      y: e.clientY,
+      width: bounds.width,
+      height: bounds.height,
+    };
+  }, [bounds.width, bounds.height]);
+
+  useEffect(() => {
+    if (!isResizing) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const dx = e.clientX - resizeStartRef.current.x;
+      const dy = e.clientY - resizeStartRef.current.y;
+      setBounds((b: typeof DEFAULT_BOUNDS) => ({
+        ...b,
+        width: Math.max(250, resizeStartRef.current.width + dx),
+        height: Math.max(200, resizeStartRef.current.height + dy),
+      }));
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+    };
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [isResizing]);
 
   if (!isOpen) return null;
 
   const tabKeys = Object.keys(tabs);
-  const rawContent = getRawContent();
+  let rawContent: Record<string, unknown>;
+  try {
+    rawContent = getRawContent();
+  } catch {
+    return null; // Not initialized yet
+  }
 
   const handleTabChange = (key: string, value: string) => {
     setTabs((prev) => ({ ...prev, [key]: value }));
   };
 
   const handlePreview = () => {
-    // Validate all tabs first
     for (const [key, value] of Object.entries(tabs)) {
       try {
         JSON.parse(value);
@@ -272,25 +355,11 @@ function ContentExposeInner({
     }
     const fullContent = { ...rawContent, ...parsed };
     localStorage.setItem("content-expose-preview", JSON.stringify(fullContent));
-    // Save scroll position before reload
-    if (scrollRef.current) {
-      localStorage.setItem(
-        "content-expose-scroll",
-        String(scrollRef.current.scrollTop)
-      );
-    }
     window.location.reload();
   };
 
   const handleReset = () => {
     localStorage.removeItem("content-expose-preview");
-    // Save scroll position before reload
-    if (scrollRef.current) {
-      localStorage.setItem(
-        "content-expose-scroll",
-        String(scrollRef.current.scrollTop)
-      );
-    }
     window.location.reload();
   };
 
@@ -310,202 +379,102 @@ function ContentExposeInner({
   };
 
   return (
-    <Rnd
-      position={{ x: bounds.x, y: bounds.y }}
-      size={{ width: bounds.width, height: bounds.height }}
-      onDragStop={(_: unknown, d: { x: number; y: number }) =>
-        setBounds((b: typeof DEFAULT_BOUNDS) => ({ ...b, x: d.x, y: d.y }))
-      }
-      onResizeStop={(
-        _: unknown,
-        __: unknown,
-        ref: HTMLElement,
-        ___: unknown,
-        pos: { x: number; y: number }
-      ) =>
-        setBounds({
-          x: pos.x,
-          y: pos.y,
-          width: parseInt(ref.style.width),
-          height: parseInt(ref.style.height),
-        })
-      }
-      minWidth={250}
-      minHeight={200}
-      bounds="window"
-      style={{ zIndex: 9999 }}
+    <div
+      style={{
+        ...styles.container,
+        left: bounds.x,
+        top: bounds.y,
+        width: bounds.width,
+        height: bounds.height,
+      }}
     >
-      <div style={styles.container}>
-        {/* Title bar */}
-        <div style={styles.titleBar}>
-          <span style={styles.titleText}>
-            Content Expose{" "}
-            {hasPreview && <span style={styles.previewIndicator}>*</span>}
-          </span>
-          <div style={styles.titleButtons}>
-            <button
-              onClick={handleCopy}
-              style={styles.exportButton}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = "#444";
-                e.currentTarget.style.color = "#ccc";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = "transparent";
-                e.currentTarget.style.color = "#888";
-              }}
-            >
-              <svg
-                style={{ width: "12px", height: "12px" }}
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
-                />
-              </svg>
-              Export
-            </button>
-            <button
-              onClick={() => setIsOpen(false)}
-              style={styles.closeButton}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = "#444";
-                e.currentTarget.style.color = "#ccc";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = "transparent";
-                e.currentTarget.style.color = "#666";
-              }}
-            >
-              ✕
-            </button>
-          </div>
-        </div>
-
-        {/* Tabs */}
-        <div style={styles.tabsContainer}>
-          {tabKeys.map((key) => (
-            <button
-              key={key}
-              onClick={() => setActiveTab(key)}
-              style={{
-                ...styles.tab,
-                ...(activeTab === key ? styles.tabActive : styles.tabInactive),
-              }}
-              onMouseEnter={(e) => {
-                if (activeTab !== key) {
-                  e.currentTarget.style.backgroundColor = "#2d2d2d";
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (activeTab !== key) {
-                  e.currentTarget.style.backgroundColor = "transparent";
-                }
-              }}
-            >
-              {key}
-            </button>
-          ))}
-        </div>
-
-        {/* Editor */}
-        <div ref={scrollRef} style={styles.editorContainer}>
-          <Editor
-            value={tabs[activeTab] || ""}
-            onValueChange={(value: string) => handleTabChange(activeTab, value)}
-            highlight={highlightJson}
-            padding={8}
-            style={{
-              fontFamily: "ui-monospace, monospace",
-              fontSize: 11,
-              backgroundColor: "#1e1e1e",
-              minHeight: "100%",
-              caretColor: "white",
-            }}
-          />
-        </div>
-
-        {/* Success message */}
-        {copied && (
-          <div style={styles.successMessage}>
-            JSON exported to clipboard. Now make a PR in your repo to publish
-            it!
-          </div>
-        )}
-
-        {/* Error message */}
-        {error && <div style={styles.errorMessage}>{error}</div>}
-
-        {/* Actions */}
-        <div style={styles.actionsContainer}>
+      {/* Title bar - draggable */}
+      <div style={styles.titleBar} onMouseDown={handleDragStart}>
+        <span style={styles.titleText}>
+          Content Expose{" "}
+          {hasPreview && <span style={styles.previewIndicator}>*</span>}
+        </span>
+        <div style={styles.titleButtons}>
           <button
-            onClick={handlePreview}
-            style={styles.previewButton}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = "#1177bb";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = "#0e639c";
-            }}
+            onClick={handleCopy}
+            style={styles.exportButton}
+            onMouseDown={(e) => e.stopPropagation()}
           >
-            Preview
-          </button>
-          {hasPreview && (
-            <button
-              onClick={handleReset}
-              style={styles.resetButton}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = "#444";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = "#333";
-              }}
+            <svg
+              style={{ width: "12px", height: "12px" }}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
             >
-              Reset
-            </button>
-          )}
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+              />
+            </svg>
+            Export
+          </button>
+          <button
+            onClick={() => setIsOpen(false)}
+            style={styles.closeButton}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            ✕
+          </button>
         </div>
       </div>
-    </Rnd>
+
+      {/* Tabs */}
+      <div style={styles.tabsContainer}>
+        {tabKeys.map((key) => (
+          <button
+            key={key}
+            onClick={() => setActiveTab(key)}
+            style={{
+              ...styles.tab,
+              ...(activeTab === key ? styles.tabActive : styles.tabInactive),
+            }}
+          >
+            {key}
+          </button>
+        ))}
+      </div>
+
+      {/* Editor - simple textarea */}
+      <div style={styles.editorContainer}>
+        <textarea
+          value={tabs[activeTab] || ""}
+          onChange={(e) => handleTabChange(activeTab, e.target.value)}
+          style={styles.textarea}
+          spellCheck={false}
+        />
+      </div>
+
+      {/* Success message */}
+      {copied && (
+        <div style={styles.successMessage}>
+          JSON exported to clipboard. Now make a PR in your repo to publish it!
+        </div>
+      )}
+
+      {/* Error message */}
+      {error && <div style={styles.errorMessage}>{error}</div>}
+
+      {/* Actions */}
+      <div style={styles.actionsContainer}>
+        <button onClick={handlePreview} style={styles.previewButton}>
+          Preview
+        </button>
+        {hasPreview && (
+          <button onClick={handleReset} style={styles.resetButton}>
+            Reset
+          </button>
+        )}
+      </div>
+
+      {/* Resize handle */}
+      <div style={styles.resizeHandle} onMouseDown={handleResizeStart} />
+    </div>
   );
-}
-
-// Client-only wrapper that dynamically imports dependencies
-export function ContentExpose() {
-  const [components, setComponents] = useState<{
-    Rnd: RndComponent;
-    Editor: EditorComponent;
-  } | null>(null);
-
-  useEffect(() => {
-    // Only load on client
-    Promise.all([
-      import("react-rnd"),
-      import("react-simple-code-editor"),
-    ]).then(([rndModule, editorModule]) => {
-      // Handle various module export formats
-      const RndComp = rndModule.Rnd || (rndModule as { default: { Rnd: RndComponent } }).default?.Rnd || (rndModule as { default: RndComponent }).default;
-      const EditorComp = editorModule.default || editorModule;
-
-      // Debug logging
-      console.log('[content-expose] rndModule:', rndModule);
-      console.log('[content-expose] editorModule:', editorModule);
-      console.log('[content-expose] RndComp type:', typeof RndComp);
-      console.log('[content-expose] EditorComp type:', typeof EditorComp);
-
-      setComponents({
-        Rnd: RndComp,
-        Editor: EditorComp,
-      });
-    });
-  }, []);
-
-  if (!components) return null;
-
-  return <ContentExposeInner Rnd={components.Rnd} Editor={components.Editor} />;
 }

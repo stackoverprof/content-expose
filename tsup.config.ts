@@ -7,5 +7,5 @@ export default defineConfig({
   splitting: false,
   sourcemap: true,
   clean: true,
-  external: ["react", "react-dom", "react-rnd", "react-simple-code-editor"],
+  external: ["react", "react-dom"],
 });
