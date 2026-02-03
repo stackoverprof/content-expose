@@ -1,6 +1,6 @@
 {
   "name": "content-expose",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "A lightweight content editing devtools panel for React applications",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",

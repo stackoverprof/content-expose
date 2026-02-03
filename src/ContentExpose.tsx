@@ -257,8 +257,6 @@ export function ContentExpose() {
   }, [activeTab]);
 
   useEffect(() => {
-    if (!mounted) return;
-
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "e") {
         e.preventDefault();
@@ -271,7 +269,7 @@ export function ContentExpose() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, mounted]);
+  }, [isOpen]);
 
   useEffect(() => {
     if (isOpen) {
