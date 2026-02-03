@@ -43,6 +43,7 @@ const styles: Record<string, CSSProperties> = {
     backgroundColor: "#323233",
     cursor: "move",
     userSelect: "none",
+    flexShrink: 0,
   },
   titleText: {
     fontSize: "10px",
@@ -87,6 +88,10 @@ const styles: Record<string, CSSProperties> = {
     backgroundColor: "#252526",
     borderBottom: "1px solid #333",
     overflowX: "auto",
+    overflowY: "hidden",
+    scrollbarWidth: "none",
+    msOverflowStyle: "none",
+    flexShrink: 0,
   },
   tab: {
     padding: "4px 12px",
@@ -97,6 +102,7 @@ const styles: Record<string, CSSProperties> = {
     backgroundColor: "transparent",
     border: "none",
     cursor: "pointer",
+    flexShrink: 0,
   },
   tabActive: {
     backgroundColor: "#1e1e1e",
@@ -109,21 +115,44 @@ const styles: Record<string, CSSProperties> = {
     flex: 1,
     overflow: "auto",
     position: "relative",
+    minHeight: 0,
+  },
+  editorWrapper: {
+    position: "relative",
+    minHeight: "100%",
+    fontFamily: "ui-monospace, monospace",
+    fontSize: "11px",
+    lineHeight: "1.5",
+  },
+  editorHighlight: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    padding: "8px",
+    pointerEvents: "none",
+    whiteSpace: "pre-wrap",
+    wordWrap: "break-word",
+    color: "transparent",
   },
   textarea: {
+    position: "relative",
     width: "100%",
-    height: "100%",
-    minHeight: "200px",
+    minHeight: "100%",
     padding: "8px",
     margin: 0,
     border: "none",
     outline: "none",
     resize: "none",
-    fontFamily: "ui-monospace, monospace",
-    fontSize: "11px",
-    backgroundColor: "#1e1e1e",
+    fontFamily: "inherit",
+    fontSize: "inherit",
+    lineHeight: "inherit",
+    backgroundColor: "transparent",
     color: "#d4d4d4",
-    lineHeight: 1.5,
+    caretColor: "white",
+    whiteSpace: "pre-wrap",
+    wordWrap: "break-word",
+    overflow: "hidden",
   },
   successMessage: {
     padding: "4px 8px",
@@ -132,6 +161,7 @@ const styles: Record<string, CSSProperties> = {
     fontSize: "10px",
     fontFamily: "ui-monospace, monospace",
     textAlign: "center",
+    flexShrink: 0,
   },
   errorMessage: {
     padding: "4px 8px",
@@ -140,6 +170,7 @@ const styles: Record<string, CSSProperties> = {
     fontSize: "10px",
     fontFamily: "ui-monospace, monospace",
     textAlign: "center",
+    flexShrink: 0,
   },
   actionsContainer: {
     display: "flex",
@@ -147,6 +178,7 @@ const styles: Record<string, CSSProperties> = {
     padding: "4px",
     borderTop: "1px solid #333",
     backgroundColor: "#252526",
+    flexShrink: 0,
   },
   previewButton: {
     flex: 1,
@@ -170,15 +202,19 @@ const styles: Record<string, CSSProperties> = {
     border: "none",
     cursor: "pointer",
   },
-  resizeHandle: {
-    position: "absolute",
-    bottom: 0,
-    right: 0,
-    width: "16px",
-    height: "16px",
-    cursor: "se-resize",
-    background: "linear-gradient(135deg, transparent 50%, #666 50%)",
-  },
+};
+
+type ResizeDirection = "n" | "s" | "e" | "w" | "ne" | "nw" | "se" | "sw" | null;
+
+const resizeHandleStyles: Record<string, CSSProperties> = {
+  n: { position: "absolute", top: 0, left: 8, right: 8, height: 6, cursor: "ns-resize" },
+  s: { position: "absolute", bottom: 0, left: 8, right: 8, height: 6, cursor: "ns-resize" },
+  e: { position: "absolute", right: 0, top: 8, bottom: 8, width: 6, cursor: "ew-resize" },
+  w: { position: "absolute", left: 0, top: 8, bottom: 8, width: 6, cursor: "ew-resize" },
+  ne: { position: "absolute", top: 0, right: 0, width: 12, height: 12, cursor: "nesw-resize" },
+  nw: { position: "absolute", top: 0, left: 0, width: 12, height: 12, cursor: "nwse-resize" },
+  se: { position: "absolute", bottom: 0, right: 0, width: 12, height: 12, cursor: "nwse-resize" },
+  sw: { position: "absolute", bottom: 0, left: 0, width: 12, height: 12, cursor: "nesw-resize" },
 };
 
 export function ContentExpose() {
@@ -200,9 +236,11 @@ export function ContentExpose() {
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
-  const [isResizing, setIsResizing] = useState(false);
+  const [resizeDir, setResizeDir] = useState<ResizeDirection>(null);
   const dragStartRef = useRef({ x: 0, y: 0, boundsX: 0, boundsY: 0 });
-  const resizeStartRef = useRef({ x: 0, y: 0, width: 0, height: 0 });
+  const resizeStartRef = useRef({ x: 0, y: 0, bounds: DEFAULT_BOUNDS });
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     localStorage.setItem("content-expose-open", isOpen ? "true" : "false");
@@ -247,8 +285,24 @@ export function ContentExpose() {
         setActiveTab(accessed[0] || "");
       }
       setHasPreview(!!localStorage.getItem("content-expose-preview"));
+
+      // Restore scroll position after render
+      requestAnimationFrame(() => {
+        const savedScroll = localStorage.getItem("content-expose-scroll");
+        if (savedScroll && scrollRef.current) {
+          scrollRef.current.scrollTop = parseInt(savedScroll);
+        }
+      });
     }
   }, [isOpen, activeTab]);
+
+  // Auto-resize textarea to fit content
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "auto";
+      textareaRef.current.style.height = textareaRef.current.scrollHeight + "px";
+    }
+  }, [tabs, activeTab]);
 
   // Drag handling
   const handleDragStart = useCallback((e: React.MouseEvent) => {
@@ -287,32 +341,55 @@ export function ContentExpose() {
   }, [isDragging]);
 
   // Resize handling
-  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+  const handleResizeStart = useCallback((dir: ResizeDirection) => (e: React.MouseEvent) => {
     e.stopPropagation();
-    setIsResizing(true);
+    setResizeDir(dir);
     resizeStartRef.current = {
       x: e.clientX,
       y: e.clientY,
-      width: bounds.width,
-      height: bounds.height,
+      bounds: { ...bounds },
     };
-  }, [bounds.width, bounds.height]);
+  }, [bounds]);
 
   useEffect(() => {
-    if (!isResizing) return;
+    if (!resizeDir) return;
 
     const handleMouseMove = (e: MouseEvent) => {
       const dx = e.clientX - resizeStartRef.current.x;
       const dy = e.clientY - resizeStartRef.current.y;
-      setBounds((b: typeof DEFAULT_BOUNDS) => ({
-        ...b,
-        width: Math.max(250, resizeStartRef.current.width + dx),
-        height: Math.max(200, resizeStartRef.current.height + dy),
-      }));
+      const start = resizeStartRef.current.bounds;
+
+      setBounds((b: typeof DEFAULT_BOUNDS) => {
+        let { x, y, width, height } = b;
+
+        // Handle horizontal resize
+        if (resizeDir.includes("e")) {
+          width = Math.max(250, start.width + dx);
+        }
+        if (resizeDir.includes("w")) {
+          const newWidth = Math.max(250, start.width - dx);
+          const widthDiff = newWidth - start.width;
+          x = start.x - widthDiff;
+          width = newWidth;
+        }
+
+        // Handle vertical resize
+        if (resizeDir.includes("s")) {
+          height = Math.max(200, start.height + dy);
+        }
+        if (resizeDir.includes("n")) {
+          const newHeight = Math.max(200, start.height - dy);
+          const heightDiff = newHeight - start.height;
+          y = start.y - heightDiff;
+          height = newHeight;
+        }
+
+        return { x: Math.max(0, x), y: Math.max(0, y), width, height };
+      });
     };
 
     const handleMouseUp = () => {
-      setIsResizing(false);
+      setResizeDir(null);
     };
 
     window.addEventListener("mousemove", handleMouseMove);
@@ -321,7 +398,7 @@ export function ContentExpose() {
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("mouseup", handleMouseUp);
     };
-  }, [isResizing]);
+  }, [resizeDir]);
 
   if (!isOpen) return null;
 
@@ -335,6 +412,12 @@ export function ContentExpose() {
 
   const handleTabChange = (key: string, value: string) => {
     setTabs((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const saveScrollPosition = () => {
+    if (scrollRef.current) {
+      localStorage.setItem("content-expose-scroll", String(scrollRef.current.scrollTop));
+    }
   };
 
   const handlePreview = () => {
@@ -355,11 +438,13 @@ export function ContentExpose() {
     }
     const fullContent = { ...rawContent, ...parsed };
     localStorage.setItem("content-expose-preview", JSON.stringify(fullContent));
+    saveScrollPosition();
     window.location.reload();
   };
 
   const handleReset = () => {
     localStorage.removeItem("content-expose-preview");
+    saveScrollPosition();
     window.location.reload();
   };
 
@@ -378,103 +463,129 @@ export function ContentExpose() {
     }
   };
 
+  const currentValue = tabs[activeTab] || "";
+
   return (
-    <div
-      style={{
-        ...styles.container,
-        left: bounds.x,
-        top: bounds.y,
-        width: bounds.width,
-        height: bounds.height,
-      }}
-    >
-      {/* Title bar - draggable */}
-      <div style={styles.titleBar} onMouseDown={handleDragStart}>
-        <span style={styles.titleText}>
-          Content Expose{" "}
-          {hasPreview && <span style={styles.previewIndicator}>*</span>}
-        </span>
-        <div style={styles.titleButtons}>
-          <button
-            onClick={handleCopy}
-            style={styles.exportButton}
-            onMouseDown={(e) => e.stopPropagation()}
-          >
-            <svg
-              style={{ width: "12px", height: "12px" }}
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
-              />
-            </svg>
-            Export
-          </button>
-          <button
-            onClick={() => setIsOpen(false)}
-            style={styles.closeButton}
-            onMouseDown={(e) => e.stopPropagation()}
-          >
-            ✕
-          </button>
-        </div>
-      </div>
+    <>
+      {/* Hide scrollbar style */}
+      <style>{`.content-expose-tabs::-webkit-scrollbar { display: none; }`}</style>
 
-      {/* Tabs */}
-      <div style={styles.tabsContainer}>
-        {tabKeys.map((key) => (
-          <button
-            key={key}
-            onClick={() => setActiveTab(key)}
-            style={{
-              ...styles.tab,
-              ...(activeTab === key ? styles.tabActive : styles.tabInactive),
-            }}
-          >
-            {key}
-          </button>
+      <div
+        style={{
+          ...styles.container,
+          left: bounds.x,
+          top: bounds.y,
+          width: bounds.width,
+          height: bounds.height,
+        }}
+      >
+        {/* Resize handles */}
+        {(["n", "s", "e", "w", "ne", "nw", "se", "sw"] as const).map((dir) => (
+          <div
+            key={dir}
+            style={resizeHandleStyles[dir]}
+            onMouseDown={handleResizeStart(dir)}
+          />
         ))}
-      </div>
 
-      {/* Editor - simple textarea */}
-      <div style={styles.editorContainer}>
-        <textarea
-          value={tabs[activeTab] || ""}
-          onChange={(e) => handleTabChange(activeTab, e.target.value)}
-          style={styles.textarea}
-          spellCheck={false}
-        />
-      </div>
-
-      {/* Success message */}
-      {copied && (
-        <div style={styles.successMessage}>
-          JSON exported to clipboard. Now make a PR in your repo to publish it!
+        {/* Title bar - draggable */}
+        <div style={styles.titleBar} onMouseDown={handleDragStart}>
+          <span style={styles.titleText}>
+            Content Expose{" "}
+            {hasPreview && <span style={styles.previewIndicator}>*</span>}
+          </span>
+          <div style={styles.titleButtons}>
+            <button
+              onClick={handleCopy}
+              style={styles.exportButton}
+              onMouseDown={(e) => e.stopPropagation()}
+            >
+              <svg
+                style={{ width: "12px", height: "12px" }}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                />
+              </svg>
+              Export
+            </button>
+            <button
+              onClick={() => setIsOpen(false)}
+              style={styles.closeButton}
+              onMouseDown={(e) => e.stopPropagation()}
+            >
+              ✕
+            </button>
+          </div>
         </div>
-      )}
 
-      {/* Error message */}
-      {error && <div style={styles.errorMessage}>{error}</div>}
+        {/* Tabs */}
+        <div style={styles.tabsContainer} className="content-expose-tabs">
+          {tabKeys.map((key) => (
+            <button
+              key={key}
+              onClick={() => setActiveTab(key)}
+              style={{
+                ...styles.tab,
+                ...(activeTab === key ? styles.tabActive : styles.tabInactive),
+              }}
+            >
+              {key}
+            </button>
+          ))}
+        </div>
 
-      {/* Actions */}
-      <div style={styles.actionsContainer}>
-        <button onClick={handlePreview} style={styles.previewButton}>
-          Preview
-        </button>
-        {hasPreview && (
-          <button onClick={handleReset} style={styles.resetButton}>
-            Reset
-          </button>
+        {/* Editor with syntax highlighting */}
+        <div ref={scrollRef} style={styles.editorContainer}>
+          <div style={styles.editorWrapper}>
+            {/* Highlighted layer (behind) */}
+            <div
+              style={styles.editorHighlight}
+              dangerouslySetInnerHTML={{ __html: highlightJson(currentValue) }}
+            />
+            {/* Textarea (on top, transparent text) */}
+            <textarea
+              ref={textareaRef}
+              value={currentValue}
+              onChange={(e) => handleTabChange(activeTab, e.target.value)}
+              style={{
+                ...styles.textarea,
+                color: "transparent",
+                caretColor: "white",
+              }}
+              spellCheck={false}
+            />
+          </div>
+        </div>
+
+        {/* Success message */}
+        {copied && (
+          <div style={styles.successMessage}>
+            JSON exported to clipboard. Now make a PR in your repo to publish it!
+          </div>
         )}
-      </div>
 
-      {/* Resize handle */}
-      <div style={styles.resizeHandle} onMouseDown={handleResizeStart} />
-    </div>
+        {/* Error message */}
+        {error && <div style={styles.errorMessage}>{error}</div>}
+
+        {/* Actions */}
+        <div style={styles.actionsContainer}>
+          <button onClick={handlePreview} style={styles.previewButton}>
+            Preview
+          </button>
+          {hasPreview && (
+            <button onClick={handleReset} style={styles.resetButton}>
+              Reset
+            </button>
+          )}
+        </div>
+      </div>
+    </>
   );
 }
