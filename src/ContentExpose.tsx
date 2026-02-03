@@ -207,14 +207,14 @@ const styles: Record<string, CSSProperties> = {
 type ResizeDirection = "n" | "s" | "e" | "w" | "ne" | "nw" | "se" | "sw" | null;
 
 const resizeHandleStyles: Record<string, CSSProperties> = {
-  n: { position: "absolute", top: 0, left: 8, right: 8, height: 6, cursor: "ns-resize" },
-  s: { position: "absolute", bottom: 0, left: 8, right: 8, height: 6, cursor: "ns-resize" },
-  e: { position: "absolute", right: 0, top: 8, bottom: 8, width: 6, cursor: "ew-resize" },
-  w: { position: "absolute", left: 0, top: 8, bottom: 8, width: 6, cursor: "ew-resize" },
-  ne: { position: "absolute", top: 0, right: 0, width: 12, height: 12, cursor: "nesw-resize" },
-  nw: { position: "absolute", top: 0, left: 0, width: 12, height: 12, cursor: "nwse-resize" },
-  se: { position: "absolute", bottom: 0, right: 0, width: 12, height: 12, cursor: "nwse-resize" },
-  sw: { position: "absolute", bottom: 0, left: 0, width: 12, height: 12, cursor: "nesw-resize" },
+  n: { position: "absolute", top: 0, left: 12, right: 12, height: 6, cursor: "ns-resize", zIndex: 10 },
+  s: { position: "absolute", bottom: 0, left: 12, right: 12, height: 6, cursor: "ns-resize", zIndex: 10 },
+  e: { position: "absolute", right: 0, top: 12, bottom: 12, width: 6, cursor: "ew-resize", zIndex: 10 },
+  w: { position: "absolute", left: 0, top: 12, bottom: 12, width: 6, cursor: "ew-resize", zIndex: 10 },
+  ne: { position: "absolute", top: 0, right: 0, width: 14, height: 14, cursor: "nesw-resize", zIndex: 11 },
+  nw: { position: "absolute", top: 0, left: 0, width: 14, height: 14, cursor: "nwse-resize", zIndex: 11 },
+  se: { position: "absolute", bottom: 0, right: 0, width: 14, height: 14, cursor: "nwse-resize", zIndex: 11 },
+  sw: { position: "absolute", bottom: 0, left: 0, width: 14, height: 14, cursor: "nesw-resize", zIndex: 11 },
 };
 
 export function ContentExpose() {
@@ -465,10 +465,15 @@ export function ContentExpose() {
 
   const currentValue = tabs[activeTab] || "";
 
+  const isInteracting = isDragging || resizeDir !== null;
+
   return (
     <>
-      {/* Hide scrollbar style */}
-      <style>{`.content-expose-tabs::-webkit-scrollbar { display: none; }`}</style>
+      {/* Hide scrollbar and prevent selection during resize/drag */}
+      <style>{`
+        .content-expose-tabs::-webkit-scrollbar { display: none; }
+        ${isInteracting ? '* { user-select: none !important; cursor: inherit !important; }' : ''}
+      `}</style>
 
       <div
         style={{
