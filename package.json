@@ -1,7 +1,7 @@
 {
   "name": "content-expose",
-  "version": "0.3.0",
-  "description": "A lightweight content editing devtools panel for React applications",
+  "version": "1.0.0",
+  "description": "Zero-dependency content management dev tool",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
@@ -21,23 +21,24 @@
     "prepublishOnly": "pnpm build"
   },
   "keywords": [
-    "react",
-    "devtools",
     "content",
     "cms",
-    "json-editor"
+    "devtools",
+    "json-editor",
+    "preview"
   ],
   "author": "",
   "license": "MIT",
   "peerDependencies": {
-    "react": ">=17.0.0",
-    "react-dom": ">=17.0.0"
+    "react": ">=17.0.0"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@types/react": "^19.0.0",
-    "@types/react-dom": "^19.0.0",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
     "tsup": "^8.3.5",
     "typescript": "^5.7.2"
   }
