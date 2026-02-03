@@ -218,20 +218,11 @@ const resizeHandleStyles: Record<string, CSSProperties> = {
 };
 
 export function ContentExpose() {
-  const [isOpen, setIsOpen] = useState(() => {
-    if (typeof window !== "undefined") {
-      return localStorage.getItem("content-expose-open") === "true";
-    }
-    return false;
-  });
-  const [bounds, setBounds] = useState(getStoredBounds);
+  const [mounted, setMounted] = useState(false);
+  const [isOpen, setIsOpen] = useState(false);
+  const [bounds, setBounds] = useState(DEFAULT_BOUNDS);
   const [tabs, setTabs] = useState<Record<string, string>>({});
-  const [activeTab, setActiveTab] = useState<string>(() => {
-    if (typeof window !== "undefined") {
-      return localStorage.getItem("content-expose-tab") || "";
-    }
-    return "";
-  });
+  const [activeTab, setActiveTab] = useState<string>("");
   const [hasPreview, setHasPreview] = useState(false);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -242,9 +233,18 @@ export function ContentExpose() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  // Hydrate state from localStorage after mount
   useEffect(() => {
+    setMounted(true);
+    setIsOpen(localStorage.getItem("content-expose-open") === "true");
+    setBounds(getStoredBounds());
+    setActiveTab(localStorage.getItem("content-expose-tab") || "");
+  }, []);
+
+  useEffect(() => {
+    if (!mounted) return;
     localStorage.setItem("content-expose-open", isOpen ? "true" : "false");
-  }, [isOpen]);
+  }, [isOpen, mounted]);
 
   useEffect(() => {
     localStorage.setItem("content-expose-bounds", JSON.stringify(bounds));
@@ -257,6 +257,8 @@ export function ContentExpose() {
   }, [activeTab]);
 
   useEffect(() => {
+    if (!mounted) return;
+
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "e") {
         e.preventDefault();
@@ -269,7 +271,7 @@ export function ContentExpose() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen]);
+  }, [isOpen, mounted]);
 
   useEffect(() => {
     if (isOpen) {
