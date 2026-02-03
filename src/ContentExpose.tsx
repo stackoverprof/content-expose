@@ -3,6 +3,8 @@ import {
   getRawContent,
   getAccessedKeys,
   getActiveContentForComponent,
+  markHydrated,
+  isHydrated,
 } from "./store";
 import { highlightJson } from "./highlightJson";
 
@@ -235,6 +237,8 @@ export function ContentExpose() {
 
   // Hydrate state from localStorage after mount
   useEffect(() => {
+    // Mark hydration complete so content proxy can use preview data
+    markHydrated();
     setMounted(true);
     setIsOpen(localStorage.getItem("content-expose-open") === "true");
     setBounds(getStoredBounds());

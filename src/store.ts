@@ -7,15 +7,17 @@ interface Store {
   rawContent: AnyContent | null;
   accessedKeys: Set<string>;
   initialized: boolean;
+  hydrated: boolean; // Only true after client hydration completes
 }
 
 const store: Store = {
   rawContent: null,
   accessedKeys: new Set<string>(),
   initialized: false,
+  hydrated: false,
 };
 
-// Check localStorage for preview content (client-side only)
+// Check localStorage for preview content (client-side only, after hydration)
 function getActiveContent(): AnyContent {
   if (!store.rawContent) {
     throw new Error(
@@ -23,7 +25,8 @@ function getActiveContent(): AnyContent {
     );
   }
 
-  if (typeof window !== "undefined") {
+  // Only use preview content AFTER hydration to avoid mismatch
+  if (store.hydrated && typeof window !== "undefined") {
     const stored = localStorage.getItem("content-expose-preview");
     if (stored) {
       try {
@@ -67,6 +70,11 @@ export function initContentExpose<T extends AnyContent>(rawContent: T): void {
   store.initialized = true;
 }
 
+// Mark hydration as complete - call this from useEffect in root component
+export function markHydrated(): void {
+  store.hydrated = true;
+}
+
 // Internal getters for ContentExpose component
 export function getRawContent(): AnyContent {
   if (!store.rawContent) {
@@ -83,4 +91,8 @@ export function getAccessedKeys(): Set<string> {
 
 export function getActiveContentForComponent(): AnyContent {
   return getActiveContent();
+}
+
+export function isHydrated(): boolean {
+  return store.hydrated;
 }

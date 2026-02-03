@@ -1,2 +1,2 @@
-export { initContentExpose, content } from "./store";
+export { initContentExpose, content, markHydrated } from "./store";
 export { ContentExpose } from "./ContentExpose";
