@@ -1,73 +1,106 @@
 // content-expose - Zero-dependency content management dev tool
 
+// ============================================================================
+// Types
+// ============================================================================
+
+type ContentValue =
+  | string
+  | number
+  | boolean
+  | null
+  | ContentValue[]
+  | { [key: string]: ContentValue };
+type Content = Record<string, ContentValue>;
+
+// ============================================================================
+// Constants
+// ============================================================================
+
 const STORAGE_KEY = "content-expose-preview";
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type AnyContent = Record<string, any>;
-
-// Module singleton
-let rawContent: AnyContent | null = null;
-let initialized = false;
-const accessedKeys = new Set<string>();
-
 const OPEN_KEY = "content-expose-open";
+const PANEL_ID = "content-expose-devtools";
 
-// Keyboard handler (module-level for proper cleanup)
+const TIMING = {
+  HYDRATION_DELAY: 500,
+} as const;
+
+// ============================================================================
+// State
+// ============================================================================
+
+interface State {
+  rawContent: Content | null;
+  initialized: boolean;
+  accessedKeys: Set<string>;
+  devToolsPanel: HTMLElement | null;
+  isOpening: boolean;
+}
+
+const state: State = {
+  rawContent: null,
+  initialized: false,
+  accessedKeys: new Set<string>(),
+  devToolsPanel: null,
+  isOpening: false,
+};
+
+// ============================================================================
+// Keyboard Handler
+// ============================================================================
+
 function handleKeydown(e: KeyboardEvent): void {
   // cmd+e (Mac) or ctrl+e (Windows/Linux)
   if ((e.metaKey || e.ctrlKey) && e.key === "e") {
     e.preventDefault();
-    toggleDevTools();
+    void toggleDevTools();
   }
 }
 
-// Check localStorage for preview content (client-side only)
-function getActiveContent(): AnyContent {
-  if (!rawContent) {
+// ============================================================================
+// Content Management
+// ============================================================================
+
+function getActiveContent(): Content {
+  if (!state.rawContent) {
     throw new Error(
       "content-expose: Content not initialized. Call initContentExpose() first."
     );
   }
 
   // Client-side: check localStorage first
-  // Note: This may cause hydration mismatch warnings if preview content differs from server content.
-  // This is acceptable for a dev tool - the warning is harmless and preview works immediately.
   if (typeof window !== "undefined") {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) {
       try {
-        return JSON.parse(stored) as AnyContent;
+        return JSON.parse(stored) as Content;
       } catch {
         // Invalid JSON, fall through to rawContent
       }
     }
   }
 
-  return rawContent;
+  return state.rawContent;
 }
 
-// Create proxy that returns active content values and tracks access
-function createContentProxy(): AnyContent {
-  const handler: ProxyHandler<AnyContent> = {
+function createContentProxy(): Content {
+  const handler: ProxyHandler<Content> = {
     get(_target, key: string) {
       const active = getActiveContent();
-      // Track accessed keys
-      if (typeof key === "string" && key in active) {
-        accessedKeys.add(key);
+      if (typeof key === "string" && Object.hasOwn(active, key)) {
+        state.accessedKeys.add(key);
       }
       return active[key];
     },
     has(_target, key: string) {
-      const active = getActiveContent();
-      return key in active;
+      return Object.hasOwn(getActiveContent(), key);
     },
     ownKeys() {
-      const active = getActiveContent();
-      return Reflect.ownKeys(active);
+      return Reflect.ownKeys(getActiveContent());
     },
     getOwnPropertyDescriptor(_target, key: string) {
       const active = getActiveContent();
-      if (key in active) {
+      if (Object.hasOwn(active, key)) {
         return {
           enumerable: true,
           configurable: true,
@@ -78,40 +111,12 @@ function createContentProxy(): AnyContent {
     },
   };
 
-  return new Proxy({} as AnyContent, handler);
+  return new Proxy({} as Content, handler);
 }
 
-// The proxy-wrapped content - always reads from localStorage if available
-export const content: AnyContent = createContentProxy();
-
-// Initialize content and set up keyboard listener
-export function initContentExpose<T extends AnyContent>(raw: T): void {
-  rawContent = raw;
-
-  if (initialized) {
-    return;
-  }
-  initialized = true;
-
-  // Set up keyboard listener (client-side only)
-  if (typeof window !== "undefined") {
-    // Remove any existing listener (handles HMR re-init)
-    window.removeEventListener("keydown", handleKeydown);
-    window.addEventListener("keydown", handleKeydown);
-
-    // Auto-open if was open before reload (delay until after React hydration settles)
-    if (localStorage.getItem(OPEN_KEY) === "true") {
-      setTimeout(() => {
-        openDevTools();
-      }, 500);
-    }
-  }
-}
-
-// DevTools panel management
-const PANEL_ID = "content-expose-devtools";
-let devToolsPanel: HTMLElement | null = null;
-let isOpening = false;
+// ============================================================================
+// DevTools Panel Management
+// ============================================================================
 
 function getExistingPanel(): HTMLElement | null {
   return document.getElementById(PANEL_ID);
@@ -122,14 +127,14 @@ async function toggleDevTools(): Promise<void> {
   const existing = getExistingPanel();
   if (existing) {
     existing.remove();
-    devToolsPanel = null;
+    state.devToolsPanel = null;
     localStorage.setItem(OPEN_KEY, "false");
     return;
   }
 
-  if (devToolsPanel) {
-    devToolsPanel.remove();
-    devToolsPanel = null;
+  if (state.devToolsPanel) {
+    state.devToolsPanel.remove();
+    state.devToolsPanel = null;
     localStorage.setItem(OPEN_KEY, "false");
     return;
   }
@@ -138,41 +143,77 @@ async function toggleDevTools(): Promise<void> {
 }
 
 async function openDevTools(): Promise<void> {
-  // If we have a reference but panel is not in DOM, clear the stale reference
-  if (devToolsPanel && !getExistingPanel()) {
-    devToolsPanel = null;
+  // Clear stale reference if panel not in DOM
+  if (state.devToolsPanel && !getExistingPanel()) {
+    state.devToolsPanel = null;
   }
 
   // Prevent duplicate opens
-  if (isOpening || devToolsPanel || getExistingPanel()) return;
-  isOpening = true;
+  if (state.isOpening || state.devToolsPanel || getExistingPanel()) {
+    return;
+  }
+
+  state.isOpening = true;
 
   try {
     // Dynamic import to avoid bundling devtools in production builds
     const { createDevToolsPanel } = await import("./devtools");
 
     // Double-check after async import
-    if (devToolsPanel || getExistingPanel()) {
+    if (state.devToolsPanel || getExistingPanel()) {
       return;
     }
 
-    devToolsPanel = createDevToolsPanel(rawContent!, () => {
-      devToolsPanel = null;
+    state.devToolsPanel = createDevToolsPanel(state.rawContent!, () => {
+      state.devToolsPanel = null;
       localStorage.setItem(OPEN_KEY, "false");
     });
-    document.body.appendChild(devToolsPanel);
+
+    document.body.appendChild(state.devToolsPanel);
     localStorage.setItem(OPEN_KEY, "true");
   } finally {
-    isOpening = false;
+    state.isOpening = false;
   }
 }
 
-// Export storage key and accessed keys for devtools
-export { STORAGE_KEY };
+// ============================================================================
+// Public API
+// ============================================================================
 
-export function getAccessedKeys(): Set<string> {
-  return accessedKeys;
+/** Proxy-wrapped content - always reads from localStorage if available */
+export const content: Content = createContentProxy();
+
+/** Initialize content and set up keyboard listener */
+export function initContentExpose<T extends Content>(raw: T): void {
+  state.rawContent = raw;
+
+  if (state.initialized) {
+    return;
+  }
+  state.initialized = true;
+
+  // Set up keyboard listener (client-side only)
+  if (typeof window !== "undefined") {
+    // Remove any existing listener (handles HMR re-init)
+    window.removeEventListener("keydown", handleKeydown);
+    window.addEventListener("keydown", handleKeydown);
+
+    // Auto-open if was open before reload
+    if (localStorage.getItem(OPEN_KEY) === "true") {
+      setTimeout(() => {
+        void openDevTools();
+      }, TIMING.HYDRATION_DELAY);
+    }
+  }
 }
+
+/** Get the set of content keys that have been accessed */
+export function getAccessedKeys(): Set<string> {
+  return state.accessedKeys;
+}
+
+// Export storage key for devtools
+export { STORAGE_KEY };
 
 // Deprecated: No longer needed. Kept for backwards compatibility.
 export function markHydrated(): void {
