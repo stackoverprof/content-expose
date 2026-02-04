@@ -68,8 +68,9 @@ function getActiveContent(): Content {
     );
   }
 
-  // Client-side: check localStorage first
-  if (typeof window !== "undefined") {
+  // Only use localStorage preview content when devtools is open
+  // This prevents SSR hydration mismatch for regular visitors
+  if (typeof window !== "undefined" && localStorage.getItem(OPEN_KEY) === "true") {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) {
       try {
@@ -122,20 +123,27 @@ function getExistingPanel(): HTMLElement | null {
   return document.getElementById(PANEL_ID);
 }
 
-async function toggleDevTools(): Promise<void> {
-  // Check for existing panel in DOM (handles HMR state loss)
+function closeDevTools(): void {
   const existing = getExistingPanel();
   if (existing) {
     existing.remove();
-    state.devToolsPanel = null;
-    localStorage.setItem(OPEN_KEY, "false");
-    return;
   }
-
   if (state.devToolsPanel) {
     state.devToolsPanel.remove();
-    state.devToolsPanel = null;
-    localStorage.setItem(OPEN_KEY, "false");
+  }
+  state.devToolsPanel = null;
+  localStorage.setItem(OPEN_KEY, "false");
+
+  // Reload to show server content if there's preview content
+  if (localStorage.getItem(STORAGE_KEY)) {
+    location.reload();
+  }
+}
+
+async function toggleDevTools(): Promise<void> {
+  // Check for existing panel in DOM (handles HMR state loss)
+  if (getExistingPanel() || state.devToolsPanel) {
+    closeDevTools();
     return;
   }
 
@@ -156,6 +164,17 @@ async function openDevTools(): Promise<void> {
   state.isOpening = true;
 
   try {
+    // Check if we need to reload to show preview content
+    const hasPreviewContent = Boolean(localStorage.getItem(STORAGE_KEY));
+    const wasAlreadyOpen = localStorage.getItem(OPEN_KEY) === "true";
+
+    // If opening for first time with existing preview content, reload to show it
+    if (hasPreviewContent && !wasAlreadyOpen) {
+      localStorage.setItem(OPEN_KEY, "true");
+      location.reload();
+      return;
+    }
+
     // Dynamic import to avoid bundling devtools in production builds
     const { createDevToolsPanel } = await import("./devtools");
 
@@ -164,10 +183,7 @@ async function openDevTools(): Promise<void> {
       return;
     }
 
-    state.devToolsPanel = createDevToolsPanel(state.rawContent!, () => {
-      state.devToolsPanel = null;
-      localStorage.setItem(OPEN_KEY, "false");
-    });
+    state.devToolsPanel = createDevToolsPanel(state.rawContent!, closeDevTools);
 
     document.body.appendChild(state.devToolsPanel);
     localStorage.setItem(OPEN_KEY, "true");
