@@ -84,8 +84,8 @@ function getActiveContent(): Content {
   return state.rawContent;
 }
 
-function createContentProxy(): Content {
-  const handler: ProxyHandler<Content> = {
+function createContentProxy<T extends Content>(): T {
+  const handler: ProxyHandler<T> = {
     get(_target, key: string) {
       const active = getActiveContent();
       if (typeof key === "string" && Object.hasOwn(active, key)) {
@@ -112,7 +112,7 @@ function createContentProxy(): Content {
     },
   };
 
-  return new Proxy({} as Content, handler);
+  return new Proxy({} as T, handler);
 }
 
 // ============================================================================
@@ -196,31 +196,43 @@ async function openDevTools(): Promise<void> {
 // Public API
 // ============================================================================
 
-/** Proxy-wrapped content - always reads from localStorage if available */
-export const content: Content = createContentProxy();
-
-/** Initialize content and set up keyboard listener */
-export function initContentExpose<T extends Content>(raw: T): void {
+/**
+ * Initialize content and set up keyboard listener.
+ * Returns a typed proxy to the content - use this for full type safety.
+ *
+ * @example
+ * // app/content.ts
+ * import { initContentExpose } from "content-expose";
+ * import rawContent from "../content.json";
+ *
+ * export const content = initContentExpose(rawContent);
+ *
+ * // Any component - fully typed!
+ * import { content } from "~/content";
+ * content.settings.logo.url // ✓ autocomplete works
+ */
+export function initContentExpose<T extends Content>(raw: T): T {
   state.rawContent = raw;
 
-  if (state.initialized) {
-    return;
-  }
-  state.initialized = true;
+  if (!state.initialized) {
+    state.initialized = true;
 
-  // Set up keyboard listener (client-side only)
-  if (typeof window !== "undefined") {
-    // Remove any existing listener (handles HMR re-init)
-    window.removeEventListener("keydown", handleKeydown);
-    window.addEventListener("keydown", handleKeydown);
+    // Set up keyboard listener (client-side only)
+    if (typeof window !== "undefined") {
+      // Remove any existing listener (handles HMR re-init)
+      window.removeEventListener("keydown", handleKeydown);
+      window.addEventListener("keydown", handleKeydown);
 
-    // Auto-open if was open before reload
-    if (localStorage.getItem(OPEN_KEY) === "true") {
-      setTimeout(() => {
-        void openDevTools();
-      }, TIMING.HYDRATION_DELAY);
+      // Auto-open if was open before reload
+      if (localStorage.getItem(OPEN_KEY) === "true") {
+        setTimeout(() => {
+          void openDevTools();
+        }, TIMING.HYDRATION_DELAY);
+      }
     }
   }
+
+  return createContentProxy<T>();
 }
 
 /** Get the set of content keys that have been accessed */
@@ -231,7 +243,20 @@ export function getAccessedKeys(): Set<string> {
 // Export storage key for devtools
 export { STORAGE_KEY };
 
-// Deprecated: No longer needed. Kept for backwards compatibility.
-export function markHydrated(): void {
-  // No-op - preview now works immediately without hydration management
-}
+/**
+ * Pre-initialized content proxy for direct imports.
+ * Call initContentExpose() first, then use this anywhere.
+ *
+ * Type it via module augmentation in a .d.ts file:
+ * @example
+ * // app/content.d.ts
+ * import type _Content from "../content.json";
+ * declare module "content-expose" {
+ *   export const content: typeof _Content;
+ * }
+ *
+ * // Any component
+ * import { content } from "content-expose";
+ * content.settings.logo.url // ✓ fully typed!
+ */
+export const content: Content = createContentProxy<Content>();
